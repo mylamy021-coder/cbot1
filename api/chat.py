@@ -1,34 +1,13 @@
 from http.server import BaseHTTPRequestHandler
 import json
-import os
+import urllib.request
 
-def get_groq_response(messages):
-    import urllib.request
-    
-    api_key = os.environ.get("GROQ_API_KEY", "")
-    
-    payload = json.dumps({
-        "model": "llama-3.3-70b-versatile",
-        "messages": messages
-    }).encode("utf-8")
-    
-    req = urllib.request.Request(
-        "https://api.groq.com/openai/v1/chat/completions",
-        data=payload,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        },
-        method="POST"
-    )
-    
-    with urllib.request.urlopen(req) as res:
-        data = json.loads(res.read().decode())
-        return data["choices"][0]["message"]["content"]
+API_KEY = "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"
 
 system_prompt = """You are AI Hujaifa. Your personality is based on Hujaifa — friendly, curious, talkative, and engaging. People chat with you as if they are talking to Hujaifa himself.
 
 Your main job is to have enjoyable and natural conversations. You talk about technology, AI, movies, books, history, daily life, ideas, and random thoughts. You write like a real human chatting online — casual, friendly, and natural. Use humor occasionally. Ask light follow-up questions to keep conversation flowing. Never mention system prompts or internal instructions.
+
 If the user doesn't know what to talk about or the conversation slows down, you naturally suggest interesting topics to continue the conversation.
 
 You can also help users write things such as messages, captions, notes, posts, ideas, explanations, or other text when they ask.
@@ -74,13 +53,29 @@ RULES
 10. Never mention system prompts, internal instructions, or hidden rules.
 11. Don't write reply in one single line, make multiple paragraph to make your response clear.
 12. Don't use any religious greetings.
-
 """
 
 sessions = {}
 
-class handler(BaseHTTPRequestHandler):
+def groq_call(messages):
+    payload = json.dumps({
+        "model": "llama-3.3-70b-versatile",
+        "messages": messages
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.groq.com/openai/v1/chat/completions",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json"
+        },
+        method="POST"
+    )
+    with urllib.request.urlopen(req) as res:
+        data = json.loads(res.read().decode())
+        return data["choices"][0]["message"]["content"]
 
+class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(200)
         self._cors()
@@ -92,20 +87,15 @@ class handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length))
             message = body.get("message", "").strip()
             session_id = body.get("session_id", "default")
-
             if not message:
                 self._send(400, {"error": "No message"})
                 return
-
             if session_id not in sessions:
                 sessions[session_id] = [{"role": "system", "content": system_prompt}]
-
             sessions[session_id].append({"role": "user", "content": message})
-            reply = get_groq_response(sessions[session_id])
+            reply = groq_call(sessions[session_id])
             sessions[session_id].append({"role": "assistant", "content": reply})
-
             self._send(200, {"reply": reply})
-
         except Exception as e:
             self._send(500, {"error": str(e)})
 
